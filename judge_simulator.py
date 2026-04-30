@@ -29,10 +29,10 @@ BOT_URL = "https://sudoku-ajar-aftermost.ngrok-free.dev"
 LLM_PROVIDER = "gemini"
 
 # Your API key (paste your key here or set GEMINI_API_KEY env var)
-LLM_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyACW5-8JLu8DZANhyay3Qbpj7PZTcFH3CQ")  # <-- PUT YOUR API KEY HERE
+LLM_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDrEW3uNsTWupXju2UklM3G6oN8NAUt4gA")  # <-- PUT YOUR API KEY HERE
 
 # Model to use (leave empty for default, or specify like "gpt-4o", "claude-3-5-sonnet-20241022", etc.)
-LLM_MODEL = ""  # <-- Optional: specify model or leave empty for default
+LLM_MODEL = "gemini-2.5-flash"  # <-- Optional: specify model or leave empty for default
 
 # For Ollama only: local server URL
 OLLAMA_URL = "http://localhost:11434"
