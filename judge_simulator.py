@@ -17,6 +17,16 @@ Author: magicpin AI Challenge Team
 """
 
 import os
+from pathlib import Path
+
+# Load .env file manually (same method as brain.py)
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip())
 
 # =============================================================================
 # ██████  CONFIGURATION - EDIT THIS SECTION ██████
@@ -29,7 +39,7 @@ BOT_URL = "https://sudoku-ajar-aftermost.ngrok-free.dev"
 LLM_PROVIDER = "gemini"
 
 # Your API key (paste your key here or set GEMINI_API_KEY env var)
-LLM_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDrEW3uNsTWupXju2UklM3G6oN8NAUt4gA")  # <-- PUT YOUR API KEY HERE
+LLM_API_KEY = os.environ.get("GEMINI_API_KEY")  # Loaded from .env file
 
 # Model to use (leave empty for default, or specify like "gpt-4o", "claude-3-5-sonnet-20241022", etc.)
 LLM_MODEL = "gemini-2.5-flash"  # <-- Optional: specify model or leave empty for default
