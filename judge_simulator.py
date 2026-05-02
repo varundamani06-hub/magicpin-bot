@@ -33,7 +33,7 @@ if _env_path.exists():
 # =============================================================================
 
 # Your bot's URL (where your bot is running)
-BOT_URL = "https://sudoku-ajar-aftermost.ngrok-free.dev"
+BOT_URL = "http://localhost:8080"
 
 # Choose your LLM provider: "openai", "anthropic", "gemini", "deepseek", "groq", "ollama", "openrouter"
 LLM_PROVIDER = "gemini"

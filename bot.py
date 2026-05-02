@@ -96,12 +96,20 @@ async def tick(body: dict):
         
         category = store["category"].get(merchant.get("category_slug"))
         
+        # Check if trigger is customer-scope (has customer_id)
+        c_id = trg.get("customer_id")
+        customer = store["customer"].get(c_id) if c_id else None
+        
+        # Determine send_as based on trigger scope
+        send_as = "merchant_on_behalf" if customer else "vera"
+        
         # Initial outreach using LLM
-        res = await compose_message(category, merchant, trg)
+        res = await compose_message(category, merchant, trg, customer)
         actions.append({
             "conversation_id": f"conv_{trg_id}",
             "merchant_id": m_id,
-            "send_as": "vera",
+            "customer_id": c_id,
+            "send_as": send_as,
             "trigger_id": trg_id,
             "template_name": res.get("template_name", "vera_v1"),
             "body": res.get("body"),
@@ -170,10 +178,10 @@ async def reply(body: dict):
         if any(k in msg for k in auto_reply_keywords):
             auto_reply_tracker[m_id] = auto_reply_tracker.get(m_id, 0) + 1
             logger.info(f"Conversation {conv_id} — auto-reply #{auto_reply_tracker[m_id]} from merchant {m_id}")
-            if auto_reply_tracker[m_id] >= 4:
+            if auto_reply_tracker[m_id] >= 3:
                 response = {
                     "action": "end",
-                    "rationale": "Ending: 4 consecutive auto-replies received. Merchant unavailable."
+                    "rationale": "Ending: 3 consecutive auto-replies received. Merchant unavailable."
                 }
             else:
                 response = {
@@ -222,7 +230,7 @@ async def healthz():
 @app.get("/v1/metadata")
 async def metadata():
     """Returns team information and bot version."""
-    return {"team_name": "Varun-Vera-Final", "version": "3.1.0"}
+    return {"team_name": "Varun-Vera-Final", "version": "3.2.0"}
 
 if __name__ == "__main__":
     import uvicorn

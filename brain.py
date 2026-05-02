@@ -132,6 +132,23 @@ CONTRARIAN INSIGHT:
 - Consider suggesting moving the promo to {low_footfall_day} instead to fill low-footfall slots.
 """
     
+    # Determine if this is a customer-facing message
+    is_customer_facing = customer is not None
+    
+    # Adjust task instruction based on scope
+    if is_customer_facing:
+        task_instruction = f"""
+Task: Write a message FROM THE MERCHANT to the CUSTOMER. 
+- Address the customer by name: {customer.get('identity', {}).get('name', 'there')}
+- The merchant ({merchant.get('identity', {}).get('name', 'your business')}) is sending this message
+- Mention the specific trigger reason from the customer's perspective
+- This should feel like a personal message from the business to their customer
+"""
+    else:
+        task_instruction = """
+Task: Write the first message to the merchant. Mention the specific trigger reason.
+"""
+    
     prompt = f"""
 CONTEXT:
 - Category Rules: {json.dumps(category)}
@@ -143,7 +160,7 @@ CONTEXT:
 {contrarian_context}
 {hinglish_instruction}
 
-Task: Write the first message to the merchant. Mention the specific trigger reason.
+{task_instruction}
 COMPELLING ELEMENTS TO INCLUDE:
 - Data Anchoring: Reference specific metrics compared to peer medians
 - Reciprocity: Show you've already done work ("I've already pulled the abstract for you")
@@ -218,6 +235,9 @@ async def handle_conversation(history: list, category: dict, merchant: dict):
     if "hi" in merchant_languages or "hi-en" in merchant_languages:
         hinglish_instruction = "\n\nHINGLISH INSTRUCTION: Talk like a fellow business owner in India. Use natural phrases like 'Apke liye', 'Check kar lijiye', 'Karte hain', 'Chaliye' where appropriate, but keep technical terms (ROI, Scaling, CTR) in English."
     
+    # Extract the last message for context
+    last_message = history[-1].get("content", "") if history else ""
+    
     prompt = f"""
 CONVERSATION HISTORY:
 {json.dumps(history)}
@@ -227,14 +247,20 @@ MERCHANT CONTEXT:
 {metrics_context}
 {hinglish_instruction}
 
-Task: Respond to the merchant's last message. If they agreed to move forward,
-provide the very next step in the magicpin onboarding or growth process.
+Task: Respond to the merchant's last message. 
+- READ AND UNDERSTAND their specific request or question
+- Provide a DIRECT, RELEVANT response to what they asked
+- If they agreed to move forward, provide the very next step in the magicpin onboarding or growth process
+- If they asked about a specific topic (e.g., X-ray setup, pricing, etc.), address that specifically
+- NEVER give generic responses about unrelated topics
 
 COMPELLING ELEMENTS TO INCLUDE:
 - Data Anchoring: Reference specific metrics compared to peer medians
 - Reciprocity: Show you've already done work
 - Curiosity: Reference specific cohorts or data points
 - Low-friction CTA: End with "Want me to draft this?", "Should I pull the abstract?", or "Reply 1 to approve"
+
+CRITICAL: Your response must be directly relevant to the merchant's last message. If they mentioned X-ray equipment, talk about X-ray equipment. If they mentioned pricing, talk about pricing.
 """
 
     try:
