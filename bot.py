@@ -50,6 +50,7 @@ store = {
 history: Dict[str, List] = {}
 turn_tracker = {}
 auto_reply_tracker = {}
+conversation_context: Dict[str, dict] = {}  # Stores trigger context per conversation
 
 class ContextBody(BaseModel):
     scope: str
@@ -105,8 +106,9 @@ async def tick(body: dict):
         
         # Initial outreach using LLM
         res = await compose_message(category, merchant, trg, customer)
+        conv_id = f"conv_{trg_id}"
         actions.append({
-            "conversation_id": f"conv_{trg_id}",
+            "conversation_id": conv_id,
             "merchant_id": m_id,
             "customer_id": c_id,
             "send_as": send_as,
@@ -116,6 +118,16 @@ async def tick(body: dict):
             "cta": res.get("cta"),
             "rationale": res.get("rationale")
         })
+        
+        # Store trigger context for state awareness in subsequent replies
+        conversation_context[conv_id] = {
+            "trigger": trg,
+            "trigger_id": trg_id,
+            "merchant_id": m_id,
+            "customer_id": c_id,
+            "category": category,
+            "initial_message": res.get("body", "")
+        }
     return {"actions": actions}
 
 @app.post("/v1/reply")
@@ -127,8 +139,7 @@ async def reply(body: dict):
     1. Input validation (non-text, empty)
     2. Hostile guard (stop, spam, etc.)
     3. Auto-reply detection (tracks by merchant_id, ends after 4)
-    4. Positive intent override (ok, yes, next, etc.)
-    5. LLM fallback for ambiguous responses
+    4. LLM fallback for context-aware responses (removed generic positive intent override)
     
     Args:
         body: Request with conversation_id, merchant_id, and message
@@ -140,9 +151,10 @@ async def reply(body: dict):
         conv_id = body.get("conversation_id", "unknown")
         raw_msg = body.get("message")
         m_id = body.get("merchant_id", "unknown")
+        c_id = body.get("customer_id")
 
         # Log incoming message
-        await log_conversation_event(conv_id, m_id, "message_received", {"message": raw_msg})
+        await log_conversation_event(conv_id, m_id, "message_received", {"message": raw_msg, "customer_id": c_id})
 
         # Edge-case: non-string input (image, media, malformed payload)
         if not isinstance(raw_msg, str):
@@ -191,28 +203,36 @@ async def reply(body: dict):
             await log_conversation_event(conv_id, m_id, "action_taken", response)
             return response
 
-        # 4. Intent Transition (Kept the passing logic)
-        positive_keywords = ["ok", "yes", "next", "sure", "interested", "do it", "lets go"]
-        if any(word in msg for word in positive_keywords):
-            logger.info(f"Conversation {conv_id} — positive intent detected")
+        # 4. Check for clarifying questions (action=parse logic)
+        is_customer_facing = c_id is not None
+        # More specific clarifying indicators that don't trigger on agreement phrases
+        clarifying_indicators = ["can you explain", "how does", "what is", "tell me more", "need help", "clarify", "more details"]
+        # Agreement phrases that should NOT trigger PARSE
+        agreement_phrases = ["ok lets do it", "ok let's do it", "what's next", "whats next", "lets start", "let's start"]
+        
+        # Only trigger PARSE if it's a genuine clarifying question AND not an agreement
+        if any(indicator in msg for indicator in clarifying_indicators) and not is_customer_facing and not any(phrase in msg for phrase in agreement_phrases):
+            logger.info(f"Conversation {conv_id} — clarifying question detected, using action=parse")
             response = {
-                "action": "send",
-                "body": "Great. I'll start by reviewing your current price list to ensure your top items are optimized for magicpin's 'Best Sellers' section. Shall I proceed with the updates?",
-                "rationale": "Merchant agreed; initiating catalog optimization.",
-                "template_name": "vera_v1"
+                "action": "parse",
+                "rationale": "Merchant asked a clarifying question; intent understanding needed."
             }
             await log_conversation_event(conv_id, m_id, "action_taken", response)
             return response
 
-        # 5. Default Fallback
+        # 5. Default to LLM for all other cases to ensure context-aware responses
         merchant = store["merchant"].get(m_id) or next(iter(store["merchant"].values()), {})
         category = store["category"].get(merchant.get("category_slug", ""), {})
+        customer = store["customer"].get(c_id) if c_id else None
+        
+        # Retrieve trigger context for state awareness
+        trigger_ctx = conversation_context.get(conv_id, {})
 
         if conv_id not in history: history[conv_id] = []
         history[conv_id].append({"role": "merchant", "content": msg})
 
-        logger.info(f"Conversation {conv_id} — delegating to LLM fallback")
-        response = await handle_conversation(history[conv_id], category, merchant)
+        logger.info(f"Conversation {conv_id} — delegating to LLM for context-aware response")
+        response = await handle_conversation(history[conv_id], category, merchant, customer, trigger_ctx)
         await log_conversation_event(conv_id, m_id, "action_taken", response)
         return response
 
